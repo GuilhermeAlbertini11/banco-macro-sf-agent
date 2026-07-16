@@ -1,0 +1,31 @@
+{
+  "version": "3.15.0-rc",
+  "mode": "project",
+  "profiles": [
+    "developer",
+    "ta",
+    "sa",
+    "ba",
+    "pm",
+    "data360",
+    "fsc"
+  ],
+  "tools": [
+    "vscode",
+    "claude"
+  ],
+  "orchestration": {
+    "enabled": true,
+    "engine": "native",
+    "mode": "project",
+    "profiles": [
+      "developer",
+      "ta",
+      "sa",
+      "ba",
+      "pm",
+      "data360",
+      "fsc"
+    ]
+  }
+}

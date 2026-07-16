@@ -1,0 +1,25 @@
+# State do setup-agents (local, não compartilhar)
+.setup-agents/state/*.jsonl
+!.setup-agents/state/README.md
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Metadata da org (pode conter dados sensíveis)
+metadata/
+
+# Docs internos e planilhas geradas
+docs/
+
+# Credenciais e tokens
+.env
+*.env
+*.pem
+*.key
+
+# Node
+node_modules/
+
+# References cache (PDFs e HTMLs pesados — não subir no git)
+.setup-agents/references/

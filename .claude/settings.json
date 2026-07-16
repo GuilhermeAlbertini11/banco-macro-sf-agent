@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"# setup-agents:preflight — If this is a work instruction (implement, fix, review, generate, plan, research, document), do NOT start reading or editing files yet: first run the pre-flight, then create or claim a task and start its workflow (sf setup-agents workflow run). Registering the task is a precondition, not the work.\"; (sf setup-agents task list --json 2>/dev/null && sf setup-agents workflow pending --json 2>/dev/null) || true"
+          }
+        ]
+      }
+    ]
+  },
+  "_setupAgentsVersion": "3.15.0-rc"
+}
