@@ -6,6 +6,8 @@ GREEN="\033[0;32m"
 YELLOW="\033[0;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
+REPO="https://github.com/GuilhermeAlbertini11/banco-macro-sf-agent.git"
+DIR="$HOME/banco-macro-sf-agent"
 
 echo ""
 echo -e "${BOLD}╔══════════════════════════════════════════════════╗${RESET}"
@@ -14,74 +16,77 @@ echo -e "${BOLD}╚════════════════════�
 echo ""
 
 ok()  { echo -e "  ${GREEN}✓${RESET} $1"; }
-warn(){ echo -e "  ${YELLOW}⚠${RESET}  $1"; }
-info(){ echo -e "  ${BOLD}→${RESET} $1"; }
+warn(){ echo -e "  ${YELLOW}→${RESET} $1"; }
 fail(){ echo -e "  ${RED}✗${RESET} $1"; exit 1; }
 
-# ── 1. Node.js ──────────────────────────────────────────────────────────────
-info "Verificando Node.js..."
-if command -v node &>/dev/null; then
-  ok "Node.js $(node --version) encontrado"
-else
-  warn "Node.js não encontrado. Instalando via Homebrew..."
-  if ! command -v brew &>/dev/null; then
-    fail "Homebrew não encontrado. Instale em https://brew.sh e rode este script novamente."
-  fi
+# ── Homebrew ─────────────────────────────────────────────────────────────────
+if ! command -v brew &>/dev/null; then
+  warn "Instalando Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+ok "Homebrew OK"
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+if ! command -v node &>/dev/null; then
+  warn "Instalando Node.js..."
   brew install node
-  ok "Node.js instalado"
 fi
+ok "Node.js $(node --version)"
 
-# ── 2. Claude Code CLI ───────────────────────────────────────────────────────
-info "Verificando Claude Code CLI..."
-if command -v claude &>/dev/null; then
-  ok "Claude Code $(claude --version 2>/dev/null || echo '') encontrado"
-else
-  warn "Claude Code não encontrado. Instalando..."
+# ── Claude Code CLI ───────────────────────────────────────────────────────────
+if ! command -v claude &>/dev/null; then
+  warn "Instalando Claude Code..."
   npm install -g @anthropic/claude-code
-  ok "Claude Code instalado"
 fi
+ok "Claude Code OK"
 
-# ── 3. Salesforce CLI ────────────────────────────────────────────────────────
-info "Verificando Salesforce CLI (sf)..."
-if command -v sf &>/dev/null; then
-  ok "sf CLI $(sf --version 2>/dev/null | head -1) encontrado"
-else
-  warn "sf CLI não encontrado. Instalando..."
+# ── Salesforce CLI ────────────────────────────────────────────────────────────
+if ! command -v sf &>/dev/null; then
+  warn "Instalando sf CLI..."
   npm install -g @salesforce/cli
-  ok "sf CLI instalado"
 fi
+ok "sf CLI OK"
 
-# ── 4. Plugin setup-agents ───────────────────────────────────────────────────
-info "Verificando plugin @jterrats/setup-agents..."
-if sf plugins inspect @jterrats/setup-agents &>/dev/null 2>&1; then
-  ok "Plugin setup-agents já instalado"
-else
+# ── Plugin setup-agents ───────────────────────────────────────────────────────
+if ! sf plugins inspect @jterrats/setup-agents &>/dev/null 2>&1; then
   warn "Instalando plugin setup-agents..."
   sf plugins install @jterrats/setup-agents@3.15.0-rc
-  ok "Plugin setup-agents instalado"
 fi
+ok "Plugin setup-agents OK"
 
-# ── 5. Variável ANTHROPIC_API_KEY ────────────────────────────────────────────
-info "Verificando ANTHROPIC_API_KEY..."
-if [ -n "$ANTHROPIC_API_KEY" ]; then
-  ok "ANTHROPIC_API_KEY configurada"
+# ── Clonar repo ───────────────────────────────────────────────────────────────
+if [ -d "$DIR/.git" ]; then
+  warn "Atualizando repositório existente..."
+  git -C "$DIR" pull --quiet
 else
-  warn "ANTHROPIC_API_KEY não encontrada no ambiente."
+  warn "Clonando repositório..."
+  git clone --quiet "$REPO" "$DIR"
+fi
+ok "Repositório em $DIR"
+
+# ── ANTHROPIC_API_KEY ─────────────────────────────────────────────────────────
+SHELL_RC="$HOME/.zshrc"
+[ -n "$BASH_VERSION" ] && SHELL_RC="$HOME/.bashrc"
+
+if [ -z "$ANTHROPIC_API_KEY" ] || ! grep -q "ANTHROPIC_API_KEY" "$SHELL_RC" 2>/dev/null; then
   echo ""
-  echo -e "  Adicione no seu ${BOLD}~/.zshrc${RESET} ou ${BOLD}~/.bashrc${RESET}:"
-  echo -e "  ${YELLOW}export ANTHROPIC_API_KEY=\"sk-ant-...\"${RESET}"
-  echo ""
-  echo -e "  Obtenha sua chave em: ${BOLD}https://console.anthropic.com${RESET}"
+  echo -e "  ${BOLD}Cole sua Anthropic API Key${RESET} (console.anthropic.com → API Keys):"
+  echo -n "  sk-ant-... > "
+  read -r API_KEY
+  if [ -n "$API_KEY" ]; then
+    echo "" >> "$SHELL_RC"
+    echo "export ANTHROPIC_API_KEY=\"$API_KEY\"" >> "$SHELL_RC"
+    export ANTHROPIC_API_KEY="$API_KEY"
+    ok "API Key salva em $SHELL_RC"
+  fi
+else
+  ok "ANTHROPIC_API_KEY já configurada"
 fi
 
-# ── Resumo ───────────────────────────────────────────────────────────────────
+# ── Pronto ────────────────────────────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}══════════════════════════════════════════════════${RESET}"
-echo -e "${GREEN}${BOLD}  Setup concluído!${RESET}"
+echo -e "${GREEN}${BOLD}  ✓ Tudo pronto!${RESET}"
 echo ""
-echo -e "  Para iniciar o agente, abra esta pasta no Claude Code:"
-echo -e "  ${BOLD}claude${RESET}"
-echo ""
-echo -e "  Ou via VS Code / Cursor com a extensão Claude Code."
-echo -e "${BOLD}══════════════════════════════════════════════════${RESET}"
+echo -e "  Rode o agente com:"
+echo -e "  ${BOLD}cd $DIR && claude${RESET}"
 echo ""
