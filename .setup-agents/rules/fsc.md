@@ -6,24 +6,25 @@
 Use this metadata before assigning work to this profile or accepting handoff from another profile.
 
 ### Activation Signals
-- Financial Services Cloud data model, FinServ objects, ARC, household, rollup, referral, or FSC managed package work
+- Financial Services Cloud data model, FSC Core standard objects (`FinancialAccount`, `FinancialAccountParty`, `PartyRelationshipGroup`, …), ARC, household, rollup, referral, or FSC work. (Legacy `FinServ__` managed-package objects only appear during coexistence/migration — see below.)
 
 ### Expected Evidence
-- FSC object validation
-- rollup result
+- FSC Core standard-object validation
+- rollup result (Record/Summary Rollups)
 - ARC or referral flow review
 
 ### Gates
 - data integrity
 - compliance
-- package-safety
+- coexistence-safety (managed package ↔ FSC Core: never mix models on the same entity)
 
 ---
 
 # Financial Services Cloud (FSC) Standards
 
 > Role: FSC Developer / Consultant — Salesforce Professional Services.
-> FSC is a managed package on top of core Salesforce. All standards here apply **in addition to** general Apex and LWC rules.
+> **This org runs FSC Core** — Financial Services Cloud rebuilt as **standard objects on the core platform** (no `FinServ__` namespace, no managed package to install, no external upgrade cycle). Features are enabled through the **Financial Account Management Standard Objects** setting plus permission sets, not package installation. All standards here apply **in addition to** general Apex and LWC rules.
+> **Legacy note (managed package):** the `FinServ__*` managed package can coexist with FSC Core during a phased migration, but the two models must **never be mixed on the same entity**. Default to FSC Core standard objects for all new work; only touch `FinServ__*` objects when explicitly migrating or maintaining legacy records.
 
 ## Consultative Design (CRITICAL)
 - **No Ninja Edits.** Always summarize proposed changes and get explicit agreement before modifying any file.
@@ -70,49 +71,44 @@ Use this metadata before assigning work to this profile or accepting handoff fro
 ## FSC Data Model (CRITICAL)
 - **PersonAccount for individuals.** Enable PersonAccount in Setup → Account Settings.
   Use a dedicated Record Type (e.g., `Individual_Client`) — never share a Record Type between PersonAccount and Business Account.
-- **Household Account** uses Record Type `IndustriesHousehold`. Link members via `FinServ__ContactContactRelation__c`.
-  Set `FinServ__PrimaryGroup__c` on Contact → Household Account. One Contact may belong to multiple groups but only one primary.
-- **Never create a custom "household" object.** The FSC household model is the system of record for group relationships.
+- **Household = Business Account + `PartyRelationshipGroup`.** In FSC Core the household is a two-object model: a standard **Business Account** plus a `PartyRelationshipGroup` record that designates it as a household and holds group-level data. Use the Party Relationship Group setup wizard to create households.
+  - Do **not** use the legacy `IndustriesHousehold` Account record type or `FinServ__ContactContactRelation__c` — those are managed-package constructs.
+  - Member relationships are modeled with account/contact relationship records and reciprocal roles under the Party Relationship Group.
+- **Never create a custom "household" object.** The `PartyRelationshipGroup` model is the system of record for group relationships.
 
-### Core FSC Objects
+### Core FSC Objects (FSC Core standard objects — no namespace)
 | Object | API Name | Purpose |
 |--------|----------|---------|
-| Financial Account | `FinServ__FinancialAccount__c` | Client financial products (bank, investment, insurance, loan) |
-| Financial Account Role | `FinServ__FinancialAccountRole__c` | Ownership roles: Primary Owner, Joint Owner, Beneficiary, PoA |
-| Financial Account Transaction | `FinServ__FinancialAccountTransaction__c` | Transaction history linked to a Financial Account |
-| Assets & Liabilities | `FinServ__AssetsAndLiabilities__c` | Non-product assets/liabilities for net worth calculation |
-| Financial Goal | `FinServ__FinancialGoal__c` | Client goals: Retirement, Education, Emergency Fund |
-| Referral | `FinServ__Referral__c` | Internal/external referral tracking with lifecycle stages |
-| Contact Contact Relation | `FinServ__ContactContactRelation__c` | Reciprocal role relationships between Contacts |
+| Financial Account | `FinancialAccount` | Client financial products (bank, investment, insurance, loan). No record types — use Dynamic Forms |
+| Financial Account Party | `FinancialAccountParty` | Junction between `Account` and `FinancialAccount`; models **multiple** owners/roles (`Role` picklist: Owner, Beneficiary, Trustee, Driver, Leasee, …) — replaces the managed Primary/Joint Owner lookups |
+| Financial Account Balance | `FinancialAccountBalance` | Balance **history** child records (one per update) — replaces the single overwritable balance field |
+| Account Financial Summary | `AccountFinancialSummary` | Target object for Summary Rollups of financial-account values to Account/household |
+| Financial Account Transaction | `FinancialAccountTransaction` | Transaction history linked to a Financial Account |
+| Financial Goal | `FinancialGoal` | Client goals: Retirement, Education, Emergency Fund |
+| Party Relationship Group | `PartyRelationshipGroup` | Household / relationship group (paired with a Business Account) |
 | Lead (FSC extension) | `Lead` with FSC fields | Use standard Lead + FSC fields; do NOT create a custom lead object |
 
-### Financial Account Record Types
-- `BankAccount` — Checking / Savings
-- `InvestmentAccount` — Brokerage / Portfolio
-- `InsurancePolicy` — Life, Auto, Property
-- `CreditFacility` — Mortgage, Loan, Line of Credit
-- Match business product types to these Record Types before proposing custom objects.
+> **Verify against the official API Mapping doc** for objects still being transitioned (e.g. Assets & Liabilities, Referral, Contact-Contact relations): confirm the current FSC Core standard equivalent in *"API Mapping between the managed package and standard objects"* before referencing a managed `FinServ__*` name. Do not assume a `FinServ__*` object is the source of record on this org.
 
-## Managed Package Safety Rules
-- **Do NOT add Apex triggers directly on FSC managed objects** (`FinServ__FinancialAccount__c`, `FinServ__Referral__c`, etc.).
-  Use Record-Triggered Flows or a custom junction/extension object instead.
-- **Do NOT delete or rename FSC managed fields.** Extend only — add custom fields with a project prefix.
-- **Do NOT override FSC managed page layouts.** Clone them and assign the clone to your Record Type.
-- Before each package upgrade, run `sf package version list --package <FSC_PACKAGE_ID>` and review the release notes for breaking changes.
-- Test in a sandbox with a full package upgrade before promoting to production.
+### Financial Account record details (no record types)
+- The `FinancialAccount` **standard object does not support record types.** Do **not** recreate the managed `BankAccount` / `InvestmentAccount` / `InsurancePolicy` / `CreditFacility` record types on it.
+- Differentiate account details with the `FinancialAccountType__c` picklist (Checking, Savings, Brokerage, IRA, Credit Card, etc.) and split page detail with **Dynamic Forms** (fields/sections as individual Lightning App Builder components).
+- Field encryption on `FinancialAccount` is supported only for the **Name** and **Financial Account Number** fields.
+- For insurance products, use the standard insurance objects (`InsurancePolicy`, `InsurancePolicyParticipant`, `InsurancePolicyCoverage`, `Claim`, `ClaimParticipant`) rather than a Financial Account record type.
 
-## Rollup Framework (FinServ__RollupByLookupConfig__mdt)
-- FSC provides a rollup framework via Custom Metadata Type `FinServ__RollupByLookupConfig__mdt`.
-  Use it for aggregating Financial Account values (balance, count) to Household or Contact.
-- **Never build custom Apex rollup triggers on FSC objects** — they conflict with the managed rollup engine.
-- Configuration fields:
-  - `FinServ__SourceObject__c` — object being summarized (e.g., `FinServ__FinancialAccount__c`)
-  - `FinServ__SourceField__c` — numeric field to aggregate (e.g., `FinServ__Balance__c`)
-  - `FinServ__TargetObject__c` — parent object receiving the rollup (e.g., `Account`)
-  - `FinServ__TargetField__c` — field on the parent receiving the result
-  - `FinServ__LookupField__c` — relationship field (e.g., `FinServ__PrimaryGroup__c`)
-  - `FinServ__Operation__c` — SUM, COUNT, MIN, MAX, AVERAGE
-- Deploy `customMetadata/FinServ__RollupByLookupConfig__mdt/` with the rest of your metadata package.
+## FSC Core Data Model Safety
+- **No Apex triggers directly on FSC objects.** Use Record-Triggered Flows (or a custom junction/extension object) instead of triggers on `FinancialAccount`, `FinancialAccountParty`, etc.
+- **Extend, don't fork.** Add custom fields with a project prefix; do not shadow standard fields.
+- **Coexistence discipline (managed ↔ Core).** If the `FinServ__*` managed package is still installed, keep each entity on **one** model only — never write the same financial account to both `FinancialAccount` and `FinServ__FinancialAccount__c`. Migrate entity-by-entity, not record-by-record.
+- **No package upgrade cycle.** FSC Core objects version with core Salesforce, so there is no `sf package version list` / managed-upgrade step. Track FSC Core changes through standard Salesforce release notes and test in a sandbox before deploying.
+
+## Rollup Framework (Record Rollups + Summary Rollups)
+- FSC Core replaces the managed **Rollup by Lookup Rules** (`FinServ__RollupByLookupConfig__mdt`) with native, configurable **Record Rollups** and **Summary Rollups** — **no Apex triggers**.
+  - **Record Rollups** aggregate related records (e.g., all cases/financial accounts for household members).
+  - **Summary Rollups** aggregate financial-account values (balance, count) into the `AccountFinancialSummary` object on the Account/household.
+- **Never build custom Apex rollup triggers on FSC objects** — use the native rollup configuration.
+- Configure rollups declaratively in Setup (source object/field, target, operation SUM/COUNT/MIN/MAX/AVERAGE). Plan a **full rollup recalculation** after any bulk data migration so summaries are not stale.
+- Balance trend reporting comes from `FinancialAccountBalance` history records, not from a single overwritten field.
 
 ## Actionable Relationship Center (ARC)
 - ARC is the current FSC relationship visualization — it replaced the legacy Relationship Viewer.
@@ -120,7 +116,8 @@ Use this metadata before assigning work to this profile or accepting handoff fro
 - Key concepts: Cards (nodes per object/record type), Groups (relationship sets), Display Categories (panel sections).
 - Assign ARC config to Lightning pages via the **Actionable Relationship Center** standard component.
 - Use **Reciprocal Roles** (Setup → Financial Services → Reciprocal Roles) to define bidirectional labels
-  (e.g., Spouse ↔ Spouse, Parent ↔ Child). Instantiate via `FinServ__ContactContactRelation__c` records.
+  (e.g., Spouse ↔ Spouse, Parent ↔ Child). Instantiate relationships through the FSC Core relationship
+  records under the `PartyRelationshipGroup` model (not the managed `FinServ__ContactContactRelation__c`).
 - Add card actions sparingly — each action should map to a specific Flow or quick action, not generic navigation.
 - Test ARC with restricted profiles: Display Category visibility is not automatic — validate per role.
 
@@ -128,25 +125,25 @@ Use this metadata before assigning work to this profile or accepting handoff fro
 - FSC uses **Account Team** sharing for advisor-level access to client records.
   Add advisors to the Account Team with appropriate Team Member Role and Account access level.
 - **Advisor hierarchy sharing:** configure sharing rules or Apex managed sharing for org-wide defaults below Private.
-- `FinServ__FinancialAccount__c` inherits sharing from the parent Account — do NOT set OWD to Public on Financial Accounts.
+- `FinancialAccount` inherits sharing from the parent Account — do NOT set OWD to Public on Financial Accounts.
 - For compliance use cases: use **Restriction Rules** (Setup → Security → Restriction Rules) to limit record visibility
   by segment or regulatory region without custom Apex sharing.
-- FSC Permission Sets to assign (do not create duplicates):
-  - `FinancialServicesCloud` — base FSC access
-  - `FinancialServicesCloudExtension` — advanced features (ARC, Goals, Referrals)
-  - `FSCInsurance` / `FSCMortgage` / `FSCWealth` — industry-specific feature sets
+- FSC Core access is granted through the **Financial Account Management Standard Objects** setting plus the relevant
+  standard FSC permission sets (assign, do not clone/duplicate). Verify the exact permission set names available in this
+  org's Setup rather than assuming managed-package names — FSC Core permission sets differ from the managed package's.
 
 ## Referral Management
-- Use `FinServ__Referral__c` for all referral tracking — internal advisor-to-advisor and external client referrals.
-- Key fields: `FinServ__ReferredBy__c` (User), `FinServ__ReferredTo__c` (User), `FinServ__Account__c` (Account),
-  `FinServ__Status__c` (picklist), `FinServ__ConvertedOpportunity__c` (Opportunity).
-- Automate lifecycle via Record-Triggered Flow (not triggers on the managed object).
-- On conversion: populate `FinServ__ConvertedOpportunity__c` and log a completed Activity.
+- Use the standard FSC Core **Referral** object for referral tracking — internal advisor-to-advisor and external client referrals.
+  Confirm the exact API name and field set against this org's metadata / the official API Mapping doc before coding (do not
+  assume the managed `FinServ__Referral__c` names — map them to their FSC Core standard equivalents).
+- Model referred-by / referred-to (User), the related Account, status, and converted Opportunity using the standard fields.
+- Automate lifecycle via Record-Triggered Flow (not Apex triggers on the object).
+- On conversion: populate the converted-Opportunity field and log a completed Activity.
 
 ## Financial Goals
-- Use `FinServ__FinancialGoal__c` for client planning goals (Retirement, Education, Emergency Fund).
-- Key fields: `FinServ__ActualValue__c`, `FinServ__TargetValue__c`, `FinServ__TargetDate__c`, `FinServ__GoalType__c`.
-- Track progress via the `FinServ__Progress__c` formula or a custom Apex scheduled job that updates it nightly.
+- Use the `FinancialGoal` standard object for client planning goals (Retirement, Education, Emergency Fund).
+- Track target/actual value, target date, and goal type using the standard fields (confirm exact API names against org metadata).
+- Track progress via a formula field or a custom Apex scheduled job that updates it nightly.
 - Display goals on the client 360 page using the **Financial Goals** standard FSC component.
 
 ## Einstein Next Best Action for FSC
@@ -159,27 +156,27 @@ Use this metadata before assigning work to this profile or accepting handoff fro
 ## CRM Analytics (Tableau CRM) for FSC
 - FSC ships with pre-built CRM Analytics apps: **FSC Analytics**, **Advisor Analytics**, **Insurance Analytics**.
 - Before building custom lenses, explore whether the default apps cover the requirement.
-- Data sync: FSC objects sync to CRM Analytics via the standard connector — add `FinServ__FinancialAccount__c`,
-  `FinServ__FinancialGoal__c`, and `FinServ__Referral__c` to the dataflow.
+- Data sync: FSC Core objects sync to CRM Analytics via the standard connector — add `FinancialAccount`,
+  `FinancialAccountBalance`, `FinancialGoal`, and the standard Referral object to the dataflow.
 - Use **Interaction Studio** (now Marketing Cloud Personalization) for behavioral data — not CRM Analytics.
 
 ## Industry-Specific Overlays
 ### Wealth Management
-- Use `InvestmentAccount` Record Type. Key fields: `FinServ__AUM__c`, `FinServ__PortfolioStrategy__c`.
-- Model advisor books of business via Account Team or custom junction object.
+- Use `FinancialAccount` with `FinancialAccountType__c` = Brokerage / IRA / Mutual Fund, etc. (no record type). Split detail via Dynamic Forms.
+- Model advisor books of business via Account Team or a custom junction object.
 
 ### Retail Banking
-- Use `BankAccount` Record Type. `FinServ__Balance__c` drives household rollups.
+- Use `FinancialAccount` with `FinancialAccountType__c` = Checking / Savings. `FinancialAccountBalance` history feeds the Summary Rollups into `AccountFinancialSummary`.
 - Integrate core banking via MuleSoft or Named Credential callouts — never embed account numbers in Apex.
 
 ### Insurance
-- Use `InsurancePolicy` Record Type. Enable FSCInsurance permission set.
+- Use the standard insurance objects rather than a Financial Account type. Enable the relevant FSC insurance permission set.
 - Key objects: `InsurancePolicy`, `InsurancePolicyParticipant`, `InsurancePolicyCoverage`, `Claim`, `ClaimParticipant`.
 - Integrate with policy administration systems via Platform Events or Apex callouts.
 
 ### Mortgage / Lending
-- Use `CreditFacility` Record Type. Track loan applications via standard `Opportunity` with FSC fields.
-- Enable FSCMortgage permission set for the Mortgage loan origination UI components.
+- Use `FinancialAccount` with a credit/loan `FinancialAccountType__c` (e.g., Credit Card) or the standard lending application objects; track loan applications via standard `Opportunity` with FSC fields.
+- Enable the relevant FSC mortgage permission set for the loan origination UI components.
 
 ## Data Quality & Deduplication
 - Enable **Duplicate Management** for Account and Contact — FSC clients generate duplicates via advisor imports.
@@ -188,11 +185,11 @@ Use this metadata before assigning work to this profile or accepting handoff fro
 - Never merge PersonAccounts with Business Accounts — the merge engine does not handle mixed account models.
 
 ## Testing FSC
-- **Use TestDataFactory** to create PersonAccounts, Household Accounts, and Financial Accounts in test setup.
+- **Use TestDataFactory** to create PersonAccounts, households (Business Account + `PartyRelationshipGroup`), and `FinancialAccount` records in test setup.
   PersonAccount creation requires inserting an Account with a PersonAccount Record Type Id.
-- FSC rollup triggers fire in test context — always query the target rollup field after the insert in the same transaction.
-- Assign FSC Permission Sets to test users in `@TestSetup` — `FinancialServicesCloud` is required for FSC object access.
-- Mock managed package callouts where present using `Test.setMock(HttpCalloutMock.class, ...)` pattern.
+- Native rollups run asynchronously — assert on `AccountFinancialSummary` / rollup targets accordingly (do not assume synchronous trigger behavior).
+- Assign the standard FSC Core permission sets to test users in `@TestSetup` (confirm names against the org) — required for FSC standard-object access.
+- Mock any external callouts using the `Test.setMock(HttpCalloutMock.class, ...)` pattern.
 ## Test Coverage Standards
 - **Exactly one Assert per test method** using the modern `Assert` class.
 - Use `@TestSetup` for shared test data; `System.runAs()` with Permission Set Group-based test users.
