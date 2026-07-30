@@ -83,6 +83,10 @@ else
   ok "ANTHROPIC_API_KEY já configurada"
 fi
 
+# ── References cache ─────────────────────────────────────────────────────────
+warn "Baixando cache de referências (documentação Salesforce)..."
+cd "$DIR" && sf setup-agents update --fetch-refs && ok "Referências baixadas"
+
 # ── Pronto ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}  ✓ Tudo pronto!${RESET}"
