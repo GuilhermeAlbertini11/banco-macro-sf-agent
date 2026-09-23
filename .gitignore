@@ -9,8 +9,10 @@
 # Metadata da org (pode conter dados sensíveis)
 metadata/
 
-# Docs internos e planilhas geradas
-docs/
+# Docs internos — permitir markdowns, ignorar dados e planilhas
+docs/*.xlsx
+docs/*.csv
+docs/release-management-analisis-riesgo-09oct.pdf
 
 # Credenciais e tokens
 .env
